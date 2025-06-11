@@ -55,13 +55,18 @@ class Configuration(BaseModel):
             config["configurable"] if config and "configurable" in config else {}
         )
 
-        # Get raw values from environment or config
-        raw_values: dict[str, Any] = {
-            name: os.environ.get(name.upper(), configurable.get(name))
-            for name in cls.model_fields.keys()
-        }
+        processed_values: dict[str, Any] = {}
+        for name, field_info in cls.model_fields.items():
+            value = os.environ.get(name.upper())
+            if value is None:
+                value = configurable.get(name)
 
-        # Filter out None values
-        values = {k: v for k, v in raw_values.items() if v is not None}
+            if value is not None:
+                processed_values[name] = value
+            elif field_info.default is not None: # Explicitly use Pydantic field's default
+                processed_values[name] = field_info.default
+            # If value is None and field_info.default is None,
+            # and the field is required (not Optional), Pydantic will raise an error upon cls(**processed_values)
+            # which is the correct behavior. If it's Optional, it will be None.
 
-        return cls(**values)
+        return cls(**processed_values)
